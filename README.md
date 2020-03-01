@@ -4,8 +4,7 @@ A [embedded-hal] and [rtfm] powered PineTime firmware.
 
 > The XO is typically responsible for the management of day-to-day activities,
 > freeing the commander to concentrate on strategy and planning the unit's next
-> move.
-> - [Wikipedia]
+> move. - [Wikipedia]
 
 [embedded-hal]: https://github.com/rust-embedded/embedded-hal
 [rtfm]: https://rtfm.rs/0.5/book/en/
