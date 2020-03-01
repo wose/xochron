@@ -91,6 +91,17 @@ const APP: () = {
 
         cx.device.GPIOTE.intenset.write(|w| w.in1().set_bit());
 
+        // Channel 2 - Touch Event
+        cx.device
+            .GPIOTE
+            .config
+            .iter()
+            .nth(2)
+            .unwrap()
+            .write(|w| unsafe { w.mode().event().polarity().lo_to_hi().psel().bits(28) });
+
+        cx.device.GPIOTE.intenset.write(|w| w.in2().set_bit());
+
         init::LateResources {
             button,
             gpiote: cx.device.GPIOTE,
@@ -118,6 +129,12 @@ const APP: () = {
         if gpiote.events_in.iter().nth(1).unwrap().read().bits() != 0 {
             gpiote.events_in.iter().nth(1).unwrap().reset();
             hprintln!("Button up").unwrap();
+        }
+
+        // Channel 2 - Touch Event
+        if gpiote.events_in.iter().nth(2).unwrap().read().bits() != 0 {
+            gpiote.events_in.iter().nth(2).unwrap().reset();
+            hprintln!("A Touch!").unwrap();
         }
     }
 };
