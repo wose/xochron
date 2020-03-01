@@ -38,6 +38,8 @@ const APP: () = {
         let _backlight = port0.p0_22.into_push_pull_output(Level::Low);
         let button = port0.p0_13.into_pullup_input().degrade();
         let _touch = port0.p0_28.into_pullup_input();
+        let _bma = port0.p0_08.into_pullup_input();
+        let _charging = port0.p0_12.into_pullup_input();
 
         let rst = port0.p0_26.into_push_pull_output(Level::Low);
         let _cs = port0.p0_25.into_push_pull_output(Level::Low);
@@ -102,6 +104,39 @@ const APP: () = {
 
         cx.device.GPIOTE.intenset.write(|w| w.in2().set_bit());
 
+        // Channel 3 - Accelerometer Event
+        cx.device
+            .GPIOTE
+            .config
+            .iter()
+            .nth(3)
+            .unwrap()
+            .write(|w| unsafe { w.mode().event().polarity().lo_to_hi().psel().bits(8) });
+
+        cx.device.GPIOTE.intenset.write(|w| w.in3().set_bit());
+
+        // Channel 4 - Charging on
+        cx.device
+            .GPIOTE
+            .config
+            .iter()
+            .nth(4)
+            .unwrap()
+            .write(|w| unsafe { w.mode().event().polarity().hi_to_lo().psel().bits(12) });
+
+        cx.device.GPIOTE.intenset.write(|w| w.in4().set_bit());
+
+        // Channel 5 - Charging off
+        cx.device
+            .GPIOTE
+            .config
+            .iter()
+            .nth(5)
+            .unwrap()
+            .write(|w| unsafe { w.mode().event().polarity().lo_to_hi().psel().bits(12) });
+
+        cx.device.GPIOTE.intenset.write(|w| w.in5().set_bit());
+
         init::LateResources {
             button,
             gpiote: cx.device.GPIOTE,
@@ -112,7 +147,9 @@ const APP: () = {
     fn idle(_: idle::Context) -> ! {
         hprintln!("idle").unwrap();
 
-        loop {}
+        loop {
+            continue;
+        }
     }
 
     #[task(binds = GPIOTE, resources = [gpiote])]
@@ -135,6 +172,24 @@ const APP: () = {
         if gpiote.events_in.iter().nth(2).unwrap().read().bits() != 0 {
             gpiote.events_in.iter().nth(2).unwrap().reset();
             hprintln!("A Touch!").unwrap();
+        }
+
+        // Channel 3 - Accelerometer Event
+        if gpiote.events_in.iter().nth(3).unwrap().read().bits() != 0 {
+            gpiote.events_in.iter().nth(3).unwrap().reset();
+            hprintln!("Accelerometer").unwrap();
+        }
+
+        // Channel 4 - Charging on
+        if gpiote.events_in.iter().nth(4).unwrap().read().bits() != 0 {
+            gpiote.events_in.iter().nth(4).unwrap().reset();
+            hprintln!("Charging on").unwrap();
+        }
+
+        // Channel 5 - Charging off
+        if gpiote.events_in.iter().nth(5).unwrap().read().bits() != 0 {
+            gpiote.events_in.iter().nth(5).unwrap().reset();
+            hprintln!("Charging off").unwrap();
         }
     }
 };

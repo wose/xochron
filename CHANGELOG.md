@@ -8,3 +8,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
     - button interrupt handler
     - touch interrupt handler
+    - accelerometer interrupt handler
+    - charging indicator interrupt handler
