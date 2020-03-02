@@ -9,7 +9,7 @@ use cortex_m_semihosting::hprintln;
 use embedded_graphics::prelude::*;
 use embedded_graphics::primitives::Rectangle;
 
-use hal::gpio::{Input, Level, Pin, PullUp};
+use hal::gpio::{Input, Level, Output, Pin, PullUp, PushPull};
 use hal::prelude::GpioExt;
 use hal::spim;
 use nrf52832_hal as hal;
@@ -40,10 +40,15 @@ const APP: () = {
     struct Resources {
         backlight: Backlight,
         button: Pin<Input<PullUp>>,
+        display: ST7735<
+            spim::Spim<hal::nrf52832_pac::SPIM0>,
+            Pin<Output<PushPull>>,
+            Pin<Output<PushPull>>,
+        >,
         gpiote: hal::target::GPIOTE,
     }
 
-    #[init]
+    #[init(spawn = [update_ui])]
     fn init(cx: init::Context) -> init::LateResources {
         hprintln!("init").unwrap();
 
@@ -66,9 +71,9 @@ const APP: () = {
         let backlight_high = port0.p0_23.into_push_pull_output(Level::Low).degrade();
 
         // display
-        let rst = port0.p0_26.into_push_pull_output(Level::Low);
-        let _cs = port0.p0_25.into_push_pull_output(Level::Low);
-        let dc = port0.p0_18.into_push_pull_output(Level::Low);
+        let rst = port0.p0_26.into_push_pull_output(Level::Low).degrade();
+        let _cs = port0.p0_25.into_push_pull_output(Level::Low).degrade();
+        let dc = port0.p0_18.into_push_pull_output(Level::Low).degrade();
 
         // spi
         let spi_clk = port0.p0_02.into_push_pull_output(Level::Low).degrade();
@@ -92,11 +97,6 @@ const APP: () = {
         display.init(&mut delay).unwrap();
         display.set_orientation(&Orientation::Portrait).unwrap();
 
-        let bg = (255, 255, 0);
-        let blank = Rectangle::new(Coord::new(0, 0), Coord::new(9, 9)).fill(Some(bg.into()));
-
-        display.draw(blank);
-
         // Channel 0 - Button down
         gpiote_event!(cx, 13, 0, in0, hi_to_lo);
         // Channel 1 - Button up
@@ -116,9 +116,12 @@ const APP: () = {
 
         let backlight = Backlight::new(0b010, backlight_low, backlight_mid, backlight_high);
 
+        cx.spawn.update_ui().unwrap();
+
         init::LateResources {
             backlight,
             button,
+            display,
             gpiote: cx.device.GPIOTE,
         }
     }
@@ -130,6 +133,16 @@ const APP: () = {
         loop {
             continue;
         }
+    }
+
+    #[task(resources = [display])]
+    fn update_ui(cx: update_ui::Context) {
+        hprintln!("Update UI").unwrap();
+
+        let bg = (255, 255, 0);
+        let blank = Rectangle::new(Coord::new(0, 0), Coord::new(9, 9)).fill(Some(bg.into()));
+
+        cx.resources.display.draw(blank);
     }
 
     #[task(binds = GPIOTE, resources = [gpiote, backlight])]
@@ -187,5 +200,10 @@ const APP: () = {
             hprintln!("Power disconnected").unwrap();
             cx.resources.backlight.off();
         }
+    }
+
+    // Interrupt handleres used to dispatch software tasks
+    extern "C" {
+        fn UARTE0_UART0();
     }
 };
