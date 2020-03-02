@@ -19,6 +19,20 @@ use st7735_lcd::{Orientation, ST7735};
 
 use rtfm::app;
 
+macro_rules! gpiote_event {
+    ($cx:expr, $pin:literal, $chan:literal, $evin:ident, $pol:ident) => {
+        $cx.device
+            .GPIOTE
+            .config
+            .iter()
+            .nth($chan)
+            .unwrap()
+            .write(|w| unsafe { w.mode().event().polarity().$pol().psel().bits($pin) });
+
+        $cx.device.GPIOTE.intenset.write(|w| w.$evin().set_bit());
+    };
+}
+
 #[app(device = crate::hal::target, peripherals = true)]
 const APP: () = {
     struct Resources {
@@ -40,6 +54,7 @@ const APP: () = {
         let _touch = port0.p0_28.into_pullup_input();
         let _bma = port0.p0_08.into_pullup_input();
         let _charging = port0.p0_12.into_pullup_input();
+        let _power = port0.p0_19.into_pullup_input();
 
         let rst = port0.p0_26.into_push_pull_output(Level::Low);
         let _cs = port0.p0_25.into_push_pull_output(Level::Low);
@@ -72,70 +87,21 @@ const APP: () = {
         display.draw(blank);
 
         // Channel 0 - Button down
-        cx.device
-            .GPIOTE
-            .config
-            .iter()
-            .nth(0)
-            .unwrap()
-            .write(|w| unsafe { w.mode().event().polarity().hi_to_lo().psel().bits(13) });
-
-        cx.device.GPIOTE.intenset.write(|w| w.in0().set_bit());
-
+        gpiote_event!(cx, 13, 0, in0, hi_to_lo);
         // Channel 1 - Button up
-        cx.device
-            .GPIOTE
-            .config
-            .iter()
-            .nth(1)
-            .unwrap()
-            .write(|w| unsafe { w.mode().event().polarity().lo_to_hi().psel().bits(13) });
-
-        cx.device.GPIOTE.intenset.write(|w| w.in1().set_bit());
-
+        gpiote_event!(cx, 13, 1, in1, lo_to_hi);
         // Channel 2 - Touch Event
-        cx.device
-            .GPIOTE
-            .config
-            .iter()
-            .nth(2)
-            .unwrap()
-            .write(|w| unsafe { w.mode().event().polarity().lo_to_hi().psel().bits(28) });
-
-        cx.device.GPIOTE.intenset.write(|w| w.in2().set_bit());
-
+        gpiote_event!(cx, 28, 2, in2, lo_to_hi);
         // Channel 3 - Accelerometer Event
-        cx.device
-            .GPIOTE
-            .config
-            .iter()
-            .nth(3)
-            .unwrap()
-            .write(|w| unsafe { w.mode().event().polarity().lo_to_hi().psel().bits(8) });
-
-        cx.device.GPIOTE.intenset.write(|w| w.in3().set_bit());
-
+        gpiote_event!(cx, 8, 3, in3, lo_to_hi);
         // Channel 4 - Charging on
-        cx.device
-            .GPIOTE
-            .config
-            .iter()
-            .nth(4)
-            .unwrap()
-            .write(|w| unsafe { w.mode().event().polarity().hi_to_lo().psel().bits(12) });
-
-        cx.device.GPIOTE.intenset.write(|w| w.in4().set_bit());
-
+        gpiote_event!(cx, 12, 4, in4, hi_to_lo);
         // Channel 5 - Charging off
-        cx.device
-            .GPIOTE
-            .config
-            .iter()
-            .nth(5)
-            .unwrap()
-            .write(|w| unsafe { w.mode().event().polarity().lo_to_hi().psel().bits(12) });
-
-        cx.device.GPIOTE.intenset.write(|w| w.in5().set_bit());
+        gpiote_event!(cx, 12, 5, in5, lo_to_hi);
+        // Channel 6 - Power connected
+        gpiote_event!(cx, 19, 6, in6, hi_to_lo);
+        // Channel 7 - Power disconnected
+        gpiote_event!(cx, 19, 7, in7, lo_to_hi);
 
         init::LateResources {
             button,
@@ -190,6 +156,18 @@ const APP: () = {
         if gpiote.events_in.iter().nth(5).unwrap().read().bits() != 0 {
             gpiote.events_in.iter().nth(5).unwrap().reset();
             hprintln!("Charging off").unwrap();
+        }
+
+        // Channel 6 - Power connected
+        if gpiote.events_in.iter().nth(6).unwrap().read().bits() != 0 {
+            gpiote.events_in.iter().nth(6).unwrap().reset();
+            hprintln!("Power connected").unwrap();
+        }
+
+        // Channel 7 - Power disconnected
+        if gpiote.events_in.iter().nth(7).unwrap().read().bits() != 0 {
+            gpiote.events_in.iter().nth(7).unwrap().reset();
+            hprintln!("Power disconnected").unwrap();
         }
     }
 };

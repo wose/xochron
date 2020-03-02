@@ -10,3 +10,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - touch interrupt handler
     - accelerometer interrupt handler
     - charging indicator interrupt handler
+    - power indicator interrupt handler
+
