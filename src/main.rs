@@ -9,7 +9,6 @@ use cortex_m_semihosting::hprintln;
 use embedded_graphics::prelude::*;
 use embedded_graphics::primitives::Rectangle;
 
-use embedded_hal::digital::v2::OutputPin;
 use hal::gpio::{Input, Level, Pin, PullUp};
 use hal::prelude::GpioExt;
 use hal::spim;
@@ -18,6 +17,9 @@ use nrf52832_hal as hal;
 use st7735_lcd::{Orientation, ST7735};
 
 use rtfm::app;
+
+mod backlight;
+use backlight::Backlight;
 
 macro_rules! gpiote_event {
     ($cx:expr, $pin:literal, $chan:literal, $evin:ident, $pol:ident) => {
@@ -36,6 +38,7 @@ macro_rules! gpiote_event {
 #[app(device = crate::hal::target, peripherals = true)]
 const APP: () = {
     struct Resources {
+        backlight: Backlight,
         button: Pin<Input<PullUp>>,
         gpiote: hal::target::GPIOTE,
     }
@@ -49,17 +52,25 @@ const APP: () = {
         let port0 = cx.device.P0.split();
 
         let _enable_button = port0.p0_15.into_push_pull_output(Level::Low);
-        let _backlight = port0.p0_22.into_push_pull_output(Level::Low);
+
+        // interrupt pins
         let button = port0.p0_13.into_pullup_input().degrade();
         let _touch = port0.p0_28.into_pullup_input();
         let _bma = port0.p0_08.into_pullup_input();
         let _charging = port0.p0_12.into_pullup_input();
         let _power = port0.p0_19.into_pullup_input();
 
+        // Backlight
+        let backlight_low = port0.p0_14.into_push_pull_output(Level::Low).degrade();
+        let backlight_mid = port0.p0_22.into_push_pull_output(Level::Low).degrade();
+        let backlight_high = port0.p0_23.into_push_pull_output(Level::Low).degrade();
+
+        // display
         let rst = port0.p0_26.into_push_pull_output(Level::Low);
         let _cs = port0.p0_25.into_push_pull_output(Level::Low);
         let dc = port0.p0_18.into_push_pull_output(Level::Low);
 
+        // spi
         let spi_clk = port0.p0_02.into_push_pull_output(Level::Low).degrade();
         let spi_mosi = port0.p0_03.into_push_pull_output(Level::Low).degrade();
 
@@ -103,7 +114,10 @@ const APP: () = {
         // Channel 7 - Power disconnected
         gpiote_event!(cx, 19, 7, in7, lo_to_hi);
 
+        let backlight = Backlight::new(0b010, backlight_low, backlight_mid, backlight_high);
+
         init::LateResources {
+            backlight,
             button,
             gpiote: cx.device.GPIOTE,
         }
@@ -118,7 +132,7 @@ const APP: () = {
         }
     }
 
-    #[task(binds = GPIOTE, resources = [gpiote])]
+    #[task(binds = GPIOTE, resources = [gpiote, backlight])]
     fn gpiote(cx: gpiote::Context) {
         let gpiote = cx.resources.gpiote;
 
@@ -132,12 +146,14 @@ const APP: () = {
         if gpiote.events_in.iter().nth(1).unwrap().read().bits() != 0 {
             gpiote.events_in.iter().nth(1).unwrap().reset();
             hprintln!("Button up").unwrap();
+            cx.resources.backlight.decrease();
         }
 
         // Channel 2 - Touch Event
         if gpiote.events_in.iter().nth(2).unwrap().read().bits() != 0 {
             gpiote.events_in.iter().nth(2).unwrap().reset();
             hprintln!("A Touch!").unwrap();
+            cx.resources.backlight.increase();
         }
 
         // Channel 3 - Accelerometer Event
@@ -162,12 +178,14 @@ const APP: () = {
         if gpiote.events_in.iter().nth(6).unwrap().read().bits() != 0 {
             gpiote.events_in.iter().nth(6).unwrap().reset();
             hprintln!("Power connected").unwrap();
+            cx.resources.backlight.on();
         }
 
         // Channel 7 - Power disconnected
         if gpiote.events_in.iter().nth(7).unwrap().read().bits() != 0 {
             gpiote.events_in.iter().nth(7).unwrap().reset();
             hprintln!("Power disconnected").unwrap();
+            cx.resources.backlight.off();
         }
     }
 };
