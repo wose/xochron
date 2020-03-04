@@ -204,6 +204,6 @@ const APP: () = {
 
     // Interrupt handleres used to dispatch software tasks
     extern "C" {
-        fn UARTE0_UART0();
+        fn SWI0_EGU0();
     }
 };
