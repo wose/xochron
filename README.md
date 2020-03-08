@@ -12,15 +12,15 @@ A [embedded-hal] and [rtfm] powered PineTime firmware.
 
 ## Hardware
 
-| ic               | datasheet                     | driver crate   |
-|------------------|-------------------------------|----------------|
-| nRF52832         | [Product Brief (PDF)]         | [nrf52832-hal] |
-|                  | [Product Specification (PDF)] |                |
-| ST7789V          | [ST7789V (PDF)]               | [st7735-lcd]   |
-| XTX XT25F32B     | similar [Macronix (PDF)]      |                |
-| Hynitron CST816S | [CST816S EN (PDF)]            |                |
-| BMA421           | [BMA400 (PDF)]                |                |
-| HRS3300          | [HRS3300 (PDF)]               |                |
+| ic               | datasheet                     | driver crate                      |
+|------------------|-------------------------------|-----------------------------------|
+| nRF52832         | [Product Brief (PDF)]         | [nrf52832-hal]                    |
+|                  | [Product Specification (PDF)] |                                   |
+| ST7789V          | [ST7789V (PDF)]               | [st7735-lcd], [st7789], [st7789v] |
+| XTX XT25F32B     | similar [Macronix (PDF)]      |                                   |
+| Hynitron CST816S | [CST816S EN (PDF)]            |                                   |
+| BMA421           | [BMA400 (PDF)]                |                                   |
+| HRS3300          | [HRS3300 (PDF)]               | [hrs3300-rs]                      |
 
 You can find more detailed information in the [pine64 wiki].
 
@@ -33,4 +33,7 @@ You can find more detailed information in the [pine64 wiki].
 [Product Brief (PDF)]: http://files.pine64.org/doc/datasheet/pinetime/nRF52832%20product%20brief.pdf
 [Product Specification (PDF)]: https://infocenter.nordicsemi.com/pdf/nRF52832_PS_v1.4.pdf
 [st7735-lcd]:https://crates.io/crates/st7735-lcd 
+[st7789]: https://crates.io/crates/st7789
+[st7789v]: https://github.com/wose/st7789v
 [ST7789V (PDF)]: https://wiki.pine64.org/images/5/54/ST7789V_v1.6.pdf
+[hrs3300-rs]: https://github.com/eldruin/hrs3300-rs

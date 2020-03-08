@@ -4,19 +4,23 @@
 #[allow(unused_imports)]
 use panic_semihosting;
 
+use chrono::{NaiveDateTime, Timelike};
 use cortex_m_semihosting::hprintln;
 
-use embedded_graphics::prelude::*;
-use embedded_graphics::primitives::Rectangle;
+use embedded_graphics::{egtext, fonts::Font24x32, pixelcolor::Rgb565, prelude::*, text_style};
 
-use hal::gpio::{Input, Level, Output, Pin, PullUp, PushPull};
-use hal::prelude::GpioExt;
-use hal::spim;
+use hal::{
+    gpio::{Input, Level, Output, Pin, PullUp, PushPull},
+    prelude::{ClocksExt, GpioExt, RtcExt},
+    spim,
+};
+use heapless::{consts::U8, String};
 use nrf52832_hal as hal;
 
-use st7735_lcd::{Orientation, ST7735};
-
 use rtfm::app;
+use st7789v::ST7789V;
+use ufmt::uwrite;
+use ufmt_utils::WriteAdapter;
 
 mod backlight;
 use backlight::Backlight;
@@ -35,26 +39,48 @@ macro_rules! gpiote_event {
     };
 }
 
+type Display = ST7789V<
+    spim::Spim<hal::nrf52832_pac::SPIM0>,
+    Pin<Output<PushPull>>,
+    Pin<Output<PushPull>>,
+    Pin<Output<PushPull>>,
+    (),
+    hal::spim::Error,
+>;
+
 #[app(device = crate::hal::target, peripherals = true)]
 const APP: () = {
     struct Resources {
         backlight: Backlight,
         button: Pin<Input<PullUp>>,
-        display: ST7735<
-            spim::Spim<hal::nrf52832_pac::SPIM0>,
-            Pin<Output<PushPull>>,
-            Pin<Output<PushPull>>,
-        >,
+        display: Display,
         gpiote: hal::target::GPIOTE,
+        datetime: NaiveDateTime,
+        rtc: hal::Rtc<hal::target::RTC0, hal::rtc::Started>,
     }
 
-    #[init(spawn = [update_ui])]
+    #[init]
     fn init(cx: init::Context) -> init::LateResources {
         hprintln!("init").unwrap();
 
         let mut delay = hal::Delay::new(cx.core.SYST);
 
         let port0 = cx.device.P0.split();
+        let mut nvic = cx.core.NVIC;
+
+        let clocks = ClocksExt::constrain(cx.device.CLOCK);
+        clocks
+            // use external 32MHz oscillator
+            .enable_ext_hfosc()
+            // use external 32.768 kHz crystal oscillator
+            .set_lfclk_src_external(hal::clocks::LfOscConfiguration::NoExternalNoBypass)
+            .start_lfclk();
+
+        let mut rtc = RtcExt::constrain(cx.device.RTC0);
+        // Tick ebery 1/8 s
+        rtc.set_prescaler(0xFFF).unwrap();
+        let mut rtc = rtc.enable_counter();
+        rtc.enable_interrupt(hal::rtc::RtcInterrupt::Tick, &mut nvic);
 
         let _enable_button = port0.p0_15.into_push_pull_output(Level::Low);
 
@@ -72,7 +98,7 @@ const APP: () = {
 
         // display
         let rst = port0.p0_26.into_push_pull_output(Level::Low).degrade();
-        let _cs = port0.p0_25.into_push_pull_output(Level::Low).degrade();
+        let cs = port0.p0_25.into_push_pull_output(Level::Low).degrade();
         let dc = port0.p0_18.into_push_pull_output(Level::Low).degrade();
 
         // spi
@@ -93,9 +119,8 @@ const APP: () = {
             122,
         );
 
-        let mut display = ST7735::new(spi, dc, rst, true, true);
+        let mut display = ST7789V::with_cs(spi, cs, dc, rst).unwrap();
         display.init(&mut delay).unwrap();
-        display.set_orientation(&Orientation::Portrait).unwrap();
 
         // Channel 0 - Button down
         gpiote_event!(cx, 13, 0, in0, hi_to_lo);
@@ -115,34 +140,69 @@ const APP: () = {
         gpiote_event!(cx, 19, 7, in7, lo_to_hi);
 
         let backlight = Backlight::new(0b010, backlight_low, backlight_mid, backlight_high);
-
-        cx.spawn.update_ui().unwrap();
+        display.clear(Rgb565::BLACK).unwrap();
 
         init::LateResources {
             backlight,
             button,
+            datetime: NaiveDateTime::from_timestamp(0, 0),
             display,
             gpiote: cx.device.GPIOTE,
+            rtc,
         }
     }
 
-    #[idle]
-    fn idle(_: idle::Context) -> ! {
+    #[idle(spawn = [update_ui])]
+    fn idle(cx: idle::Context) -> ! {
         hprintln!("idle").unwrap();
 
         loop {
+            cx.spawn.update_ui().unwrap();
             continue;
         }
     }
 
-    #[task(resources = [display])]
+    #[task(resources = [datetime, display])]
     fn update_ui(cx: update_ui::Context) {
-        hprintln!("Update UI").unwrap();
+        //        hprintln!("Update UI").unwrap();
+        let mut datetime = cx.resources.datetime;
 
-        let bg = (255, 255, 0);
-        let blank = Rectangle::new(Coord::new(0, 0), Coord::new(9, 9)).fill(Some(bg.into()));
+        let mut buf: String<U8> = String::new();
+        datetime.lock(|datetime| {
+            uwrite!(
+                WriteAdapter(&mut buf),
+                "{}:{}",
+                datetime.hour(),
+                datetime.minute()
+            )
+            .unwrap();
+        });
 
-        cx.resources.display.draw(blank);
+        let display = cx.resources.display;
+
+        egtext!(
+            text = &buf,
+            top_left = (60, 44),
+            style = text_style!(
+                font = Font24x32,
+                text_color = Rgb565::WHITE,
+                background_color = Rgb565::BLACK,
+            )
+        )
+        .draw(display)
+        .unwrap();
+    }
+
+    #[task(binds = RTC0, priority = 2, resources = [datetime, rtc])]
+    fn rtc0(cx: rtc0::Context) {
+        if cx
+            .resources
+            .rtc
+            .get_event_triggered(hal::rtc::RtcInterrupt::Tick, true)
+            && cx.resources.rtc.get_counter() & 0b111 == 0b111
+        {
+            *cx.resources.datetime += chrono::Duration::seconds(1);
+        }
     }
 
     #[task(binds = GPIOTE, resources = [gpiote, backlight])]

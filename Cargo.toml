@@ -12,18 +12,27 @@ description = "A embedded-hal and rtfm powered PineTime firmware"
 repository = "https://github.com/wose/xochron"
 
 [dependencies]
+chrono = { version = "0.4.11", default-features = false }
 cortex-m = "0.6.2"
 cortex-m-rtfm = "0.5.1"
 cortex-m-semihosting = "0.3.5"
-embedded-graphics = "0.5.1"
 embedded-hal = "0.2.3"
-st7735-lcd = "0.6.3"
+heapless = "0.5.3"
 panic-semihosting = "0.5.3"
+ufmt = "0.1.0"
+ufmt-utils = "0.1.1"
+
+[dependencies.embedded-graphics]
+version = "0.6.0-beta.2"
 
 [dependencies.nrf52832-hal]
 version = "0.8.1"
 default-features = false
 features = ["xxAA-package", "rt"]
+
+[dependencies.st7789v]
+git = "https://github.com/wose/st7789v.git"
+features = ["graphics"]
 
 [[bin]]
 name = "xochron"

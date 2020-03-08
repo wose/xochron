@@ -13,7 +13,7 @@ pub struct Backlight {
 impl Backlight {
     pub fn new(level: u8, low: BLPin, mid: BLPin, high: BLPin) -> Self {
         let mut backlight = Backlight {
-            level: level,
+            level,
             low,
             mid,
             high,
