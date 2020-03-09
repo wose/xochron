@@ -10,6 +10,21 @@ A [embedded-hal] and [rtfm] powered PineTime firmware.
 [rtfm]: https://rtfm.rs/0.5/book/en/
 [Wikipedia]: https://en.wikipedia.org/wiki/Executive_officer
 
+## Hacking
+
+Clone, build and flash the firmware. I use a ST-LINK/V2 clone and openocd to
+upload the binary.
+
+``` sh
+git clone https://github.com/wose/xochron.git
+cd xochron
+cargo build --release
+# start openocd in another terminal after connecting your STLink to your pinewatch
+openocd -f interface/stlink-v2.cfg -f target/nrf52.cfg
+# start gdb, it will connect to openocd upload and run the firmware
+arm-none-eabi-gdb target/thumbv7em-none-eabihf/release/xochron
+```
+
 ## Hardware
 
 | ic               | datasheet                     | driver crate                      |
