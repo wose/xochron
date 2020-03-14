@@ -194,6 +194,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "hrs3300"
+version = "0.1.0"
+source = "git+https://github.com/eldruin/hrs3300-rs.git#d209e6d018939e83d2ecc35dd3e2f7b54e3da926"
+dependencies = [
+ "embedded-hal",
+]
+
+[[package]]
 name = "indexmap"
 version = "1.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -302,9 +310,9 @@ dependencies = [
 
 [[package]]
 name = "quote"
-version = "1.0.2"
+version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "053a8c8bcc71fcce321828dc897a98ab9760bef03a4fc36693c231e5b3216cfe"
+checksum = "2bdc6c187c65bca4260c9011c9e3132efe4909da44726bad24cf7572ae338d7f"
 dependencies = [
  "proc-macro2",
 ]
@@ -471,6 +479,7 @@ dependencies = [
  "embedded-graphics",
  "embedded-hal",
  "heapless",
+ "hrs3300",
  "nrf52832-hal",
  "panic-semihosting",
  "st7789v",
