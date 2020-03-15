@@ -17,12 +17,12 @@ upload the binary.
 
 ``` sh
 git clone https://github.com/wose/xochron.git
-cd xochron
+cd xochron/xochron
 cargo build --release
 # start openocd in another terminal after connecting your STLink to your pinewatch
 openocd -f interface/stlink-v2.cfg -f target/nrf52.cfg
 # start gdb, it will connect to openocd upload and run the firmware
-arm-none-eabi-gdb target/thumbv7em-none-eabihf/release/xochron
+arm-none-eabi-gdb ../target/thumbv7em-none-eabihf/release/xochron
 ```
 
 ## Hardware
