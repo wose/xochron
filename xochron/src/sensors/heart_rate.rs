@@ -72,7 +72,7 @@ impl HeartRateSensor {
     pub fn prev_value(&self) -> (usize, u32) {
         let prev_index = match self.index {
             0 => BUFFER_SIZE-1,
-            index => index,
+            index => index - 1,
         };
        
         (prev_index, self.hr_data[prev_index])
