@@ -1,47 +1,5 @@
-[package]
-name = "xochron"
-version = "0.1.0"
-authors = ["Sebastian Woetzel <wose@zuendmasse.de>"]
-edition = "2018"
+[workspace]
 
-categories = ["embedded", "no-std"]
-keywords = ["arm", "cortex-m", "nrf52", "hal", "nrf52832"]
-license = "GPL-3.0"
-readme = "README.md"
-description = "A embedded-hal and rtfm powered PineTime firmware"
-repository = "https://github.com/wose/xochron"
-
-[dependencies]
-chrono = { version = "0.4.11", default-features = false }
-cortex-m = "0.6.2"
-cortex-m-rtfm = "0.5.1"
-cortex-m-semihosting = "0.3.5"
-embedded-hal = "0.2.3"
-heapless = "0.5.3"
-panic-semihosting = "0.5.3"
-ufmt = "0.1.0"
-ufmt-utils = "0.1.1"
-hrs3300 = { git = "https://github.com/eldruin/hrs3300-rs.git" }
-
-[dependencies.embedded-graphics]
-version = "0.6.0-beta.2"
-
-[dependencies.nrf52832-hal]
-version = "0.8.1"
-default-features = false
-features = ["xxAA-package", "rt"]
-
-[dependencies.st7789v]
-git = "https://github.com/wose/st7789v.git"
-features = ["graphics"]
-
-[[bin]]
-name = "xochron"
-test = false
-bench = false
-
-[profile.release]
-codegen-units = 1
-debug = true
-lto = true
-opt-level = "s"
+members = [
+    "xochron",
+]
