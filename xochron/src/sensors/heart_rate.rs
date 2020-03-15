@@ -1,5 +1,9 @@
+use embedded_hal as hal;
+
 use heapless::consts::U256;
 use heapless::Vec;
+
+use hrs3300::Hrs3300;
 
 const BUFFER_SIZE: usize = 240;
 
@@ -9,6 +13,8 @@ pub struct HeartRateSensor {
     hr_data: Vec<u32, U256>,
     /// points to the last updated measurement
     index: usize,
+    /// is the sensor measuring
+    measuring: bool,
     /// minimum raw data
     min: u32,
     /// maximum raw data
@@ -16,26 +22,43 @@ pub struct HeartRateSensor {
 }
 
 impl HeartRateSensor {
-    pub fn new() -> Self {
+    pub fn new() -> Result<Self, ()> {
         let mut buffer: Vec<u32, U256> = Vec::new();
-        buffer.resize_default(BUFFER_SIZE);
+        buffer.resize_default(BUFFER_SIZE)?;
 
-        Self {
+        Ok(Self {
             bpm: None,
             hr_data: buffer,
             index: 0,
+            measuring: false,
             min: 0xFFFF_FFFF,
             max: 0,
-        }
+        })
     }
 
-    pub fn update_hrs(&mut self, value: u32) {
+    pub fn update_hrs<I2C, E>(&mut self, hrs: &mut Hrs3300<I2C>) -> Result<(), hrs3300::Error<E>>
+    where
+        I2C: hal::blocking::i2c::Write<Error = E> + hal::blocking::i2c::WriteRead<Error = E>,
+    {
+        if !self.measuring {
+            hrs.enable_hrs()?;
+            hrs.enable_oscillator()?;
+            self.measuring = true;
+        }
+
         self.index = if self.index < BUFFER_SIZE - 1 {
             self.index + 1
         } else {
             0
         };
 
+        let value = hrs.read_hrs()?;
+        self.update_value(value);
+
+        Ok(())
+    }
+
+    fn update_value(&mut self, value: u32) {
         if value > self.max {
             self.max = value;
         }
@@ -71,16 +94,18 @@ impl HeartRateSensor {
 
     pub fn prev_value(&self) -> (usize, u32) {
         let prev_index = match self.index {
-            0 => BUFFER_SIZE-1,
+            0 => BUFFER_SIZE - 1,
             index => index - 1,
         };
-       
         (prev_index, self.hr_data[prev_index])
     }
 
     pub fn prev_value_norm(&self) -> (usize, f32) {
         let (prev_index, prev_value) = self.prev_value();
-        (prev_index, (prev_value - self.min) as f32 / (self.max - self.min) as f32)
+        (
+            prev_index,
+            (prev_value - self.min) as f32 / (self.max - self.min) as f32,
+        )
     }
 
     pub fn bpm(&self) -> Option<u8> {

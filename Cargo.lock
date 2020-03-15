@@ -485,4 +485,16 @@ dependencies = [
  "st7789v",
  "ufmt",
  "ufmt-utils",
+ "xochron-ui",
+]
+
+[[package]]
+name = "xochron-ui"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "embedded-graphics",
+ "heapless",
+ "ufmt",
+ "ufmt-utils",
 ]

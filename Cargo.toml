@@ -2,6 +2,7 @@
 
 members = [
     "xochron",
+    "xochron-ui",
 ]
 
 [profile.release]

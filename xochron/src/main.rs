@@ -5,10 +5,10 @@
 use panic_semihosting;
 
 use chrono::{NaiveDateTime, Timelike};
-use cortex_m_semihosting::{hprint, hprintln};
+use cortex_m_semihosting::hprintln;
 
 use embedded_graphics::{
-    egline, egtext, fonts::Font24x32, pixelcolor::Rgb565, prelude::*, primitive_style, text_style,
+    egline, pixelcolor::Rgb565, prelude::*, primitive_style,
 };
 
 use hal::{
@@ -16,14 +16,13 @@ use hal::{
     prelude::{ClocksExt, GpioExt, RtcExt},
     spim, twim,
 };
-use heapless::{consts::U8, String};
 use hrs3300::{ConversionDelay, Hrs3300, LedCurrent};
 use nrf52832_hal as hal;
 
 use rtfm::app;
 use st7789v::ST7789V;
-use ufmt::uwrite;
-use ufmt_utils::WriteAdapter;
+
+use xochron_ui::widgets::DigitalClock;
 
 mod backlight;
 use backlight::Backlight;
@@ -43,11 +42,6 @@ macro_rules! gpiote_event {
 
         $cx.device.GPIOTE.intenset.write(|w| w.$evin().set_bit());
     };
-}
-
-pub struct State {
-    running: bool,
-    heart_rate_sensor: HeartRateSensor,
 }
 
 type Display = ST7789V<
@@ -70,7 +64,7 @@ const APP: () = {
         gpiote: hal::target::GPIOTE,
         i2c: Option<twim::Twim<hal::target::TWIM1>>,
         rtc: hal::Rtc<hal::target::RTC0, hal::rtc::Started>,
-        state: State,
+        heart_rate_sensor: HeartRateSensor,
     }
 
     #[init]
@@ -171,10 +165,6 @@ const APP: () = {
 
         let backlight = Backlight::new(0b010, backlight_low, backlight_mid, backlight_high);
         display.clear(Rgb565::BLACK).unwrap();
-        let state = State {
-            running: false,
-            heart_rate_sensor: HeartRateSensor::new(),
-        };
 
         init::LateResources {
             backlight,
@@ -185,12 +175,12 @@ const APP: () = {
             gpiote: cx.device.GPIOTE,
             i2c: Some(i2c),
             rtc,
-            state,
+            heart_rate_sensor: HeartRateSensor::new().unwrap(),
         }
     }
 
     #[idle(spawn = [update_ui, measure_hr], resources = [delay, i2c])]
-    fn idle(cx: idle::Context) -> ! {
+    fn idle(_cx: idle::Context) -> ! {
         hprintln!("idle").unwrap();
 
         loop {
@@ -198,14 +188,14 @@ const APP: () = {
         }
     }
 
-    #[task(resources = [datetime, display, state])]
+    #[task(resources = [datetime, display, heart_rate_sensor])]
     fn update_ui(cx: update_ui::Context) {
         let display = cx.resources.display;
+        let mut heart_rate_sensor = cx.resources.heart_rate_sensor;
 
-        if true {
-            let mut state = cx.resources.state;
-            state.lock(|state| {
-                let index = state.heart_rate_sensor.index() as i32;
+        if false {
+            heart_rate_sensor.lock(|hrs| {
+                let index = hrs.index() as i32;
 
                 egline!(
                     start = (index, 0i32),
@@ -215,10 +205,9 @@ const APP: () = {
                 .draw(display)
                 .unwrap();
 
-                let range = (state.heart_rate_sensor.max() - state.heart_rate_sensor.min()) as f32;
+                let range = (hrs.max() - hrs.min()) as f32;
 
                 if range > 0.0 {
-                    let hrs = &state.heart_rate_sensor;
                     let (index, value_norm) = hrs.value_norm();
                     let index = index as i32;
                     let scaled_value = (value_norm * 239.0) as i32;
@@ -246,51 +235,24 @@ const APP: () = {
             });
         } else {
             let mut datetime = cx.resources.datetime;
-
-            let mut buf: String<U8> = String::new();
-            datetime.lock(|datetime| {
-                uwrite!(
-                    WriteAdapter(&mut buf),
-                    "{}:{}",
-                    datetime.hour(),
-                    datetime.minute()
-                )
-                .unwrap();
-            });
-
-            egtext!(
-                text = &buf,
-                top_left = (60, 44),
-                style = text_style!(
-                    font = Font24x32,
-                    text_color = Rgb565::WHITE,
-                    background_color = Rgb565::BLACK,
-                )
-            )
-            .draw(display)
-            .unwrap();
+            let dt = datetime.lock(|dt| *dt);
+            let clock = DigitalClock::with_date(&dt);
+            clock.draw(display).unwrap();
         }
     }
 
-    #[task(priority = 2, resources = [i2c, rtc, state])]
+    #[task(priority = 2, resources = [i2c, rtc, heart_rate_sensor])]
     fn measure_hr(cx: measure_hr::Context) {
-        static mut started: bool = false;
-
         if let Some(i2c) = cx.resources.i2c.take() {
-            let mut state = cx.resources.state;
+            let mut heart_rate_sensor = cx.resources.heart_rate_sensor;
             let mut hrs = Hrs3300::new(i2c);
-            if !*started {
-                hrs.enable_hrs().unwrap();
-                hrs.enable_oscillator().unwrap();
-                *started = true;
-            }
-            let hrs_raw = hrs.read_hrs().unwrap();
-            state.lock(|state| state.heart_rate_sensor.update_hrs(hrs_raw));
+            heart_rate_sensor
+                .lock(|heart_rate_sensor| heart_rate_sensor.update_hrs(&mut hrs).unwrap());
             *cx.resources.i2c = Some(hrs.destroy());
         }
     }
 
-    #[task(binds = RTC0, priority = 3, spawn = [measure_hr, update_ui], resources = [datetime, rtc, state])]
+    #[task(binds = RTC0, priority = 3, spawn = [measure_hr, update_ui], resources = [datetime, rtc, heart_rate_sensor])]
     fn rtc0(cx: rtc0::Context) {
         if cx
             .resources
@@ -300,17 +262,21 @@ const APP: () = {
             let counter = cx.resources.rtc.get_counter();
             if counter & 0x7F == 0x7F {
                 *cx.resources.datetime += chrono::Duration::seconds(1);
+                // only schedule display update if the minute changed
+                // TODO let the clock widget decide if an update is necessary
+                if cx.resources.datetime.second() == 0 {
+                    cx.spawn.update_ui().ok();
+                }
             }
 
-            //if cx.resources.state.running && counter & 10 == 10 {
             if counter & 0x01 == 0x01 {
-                cx.spawn.measure_hr().ok();
-                cx.spawn.update_ui().ok();
+                //                cx.spawn.measure_hr().ok();
+                //                cx.spawn.update_ui().ok();
             }
         }
     }
 
-    #[task(binds = GPIOTE, resources = [backlight, gpiote, state])]
+    #[task(binds = GPIOTE, resources = [backlight, gpiote, heart_rate_sensor])]
     fn gpiote(cx: gpiote::Context) {
         let gpiote = cx.resources.gpiote;
 
@@ -324,9 +290,6 @@ const APP: () = {
         if gpiote.events_in.iter().nth(1).unwrap().read().bits() != 0 {
             gpiote.events_in.iter().nth(1).unwrap().reset();
             //hprintln!("Button up").unwrap();
-            let mut state = cx.resources.state;
-            state.lock(|state| state.running = true);
-            //cx.resources.backlight.decrease();
         }
 
         // Channel 2 - Touch Event
